@@ -6,8 +6,6 @@ import pandas as pd
 import numpy as np
 import os
 import pickle
-import requests
-from io import BytesIO
 from pathlib import Path
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -18,32 +16,24 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
 from sklearn.metrics import r2_score
 
-# Path untuk menyimpan model
+# Path untuk model dan preprocessing tools
 MODEL_PATH = "best_model.pkl"
 IMPUTER_PATH = "imputer.pkl"
 SCALER_PATH = "scaler.pkl"
 ENCODER_PATH = "label_encoder.pkl"
 BEST_MODEL_INFO_PATH = "best_model_info.pkl"
-
-# URL data dari GitHub (HARUS diubah ke raw link yang benar)
-GITHUB_URL = "https://raw.githubusercontent.com/aguskurniawan10/prediksiNKLabUBPJPR/main/DATA%20PREDIKSI%20NK%20LAB%202025.xlsx"
-
-def load_data():
-    """Mengunduh dan membaca dataset dari GitHub"""
-    response = requests.get(GITHUB_URL)
-    response.raise_for_status()  # Pastikan tidak ada error
-    return pd.read_excel(BytesIO(response.content), engine="openpyxl")
+DATA_URL = "https://github.com/aguskurniawan10/prediksiNKLabUBPJPR/raw/main/DATA%20PREDIKSI%20NK%20LAB%202025.xlsx"
 
 def train_and_save_model():
     """Melatih model dan menyimpannya menggunakan pickle."""
-
-    # Load Data dari GitHub
-    df = load_data()
+    
+    # Load Data dari URL
+    df = pd.read_excel(DATA_URL)
 
     # Standarisasi nama kolom (hapus spasi)
     df.columns = df.columns.str.strip()
 
-    # Pastikan kolom yang diperlukan ada
+    # Pastikan kolom yang diperlukan ada dalam dataset
     required_columns = ['Suppliers', 'GCV ARB UNLOADING', 'TM ARB UNLOADING', 
                         'Ash Content ARB UNLOADING', 'Total Sulphur ARB UNLOADING', 'GCV (ARB) LAB']
     
@@ -54,10 +44,6 @@ def train_and_save_model():
     # Encode Suppliers
     label_encoder = LabelEncoder()
     df['Suppliers'] = label_encoder.fit_transform(df['Suppliers'])
-
-    # Simpan label encoder dengan classes_
-    with open(ENCODER_PATH, "wb") as file:
-        pickle.dump({"encoder": label_encoder, "classes": label_encoder.classes_}, file)
 
     # Fitur dan target
     X = df[['Suppliers', 'GCV ARB UNLOADING', 'TM ARB UNLOADING', 
@@ -100,17 +86,21 @@ def train_and_save_model():
     best_model = None
     best_score = float('-inf')
     best_model_name = ""
+    results = {}
 
     for name, model in models.items():
         model.fit(X_train_final, y_train)
         y_pred = model.predict(X_test_final)
         r2 = r2_score(y_test, y_pred)
+        results[name] = r2
         if r2 > best_score:
             best_score = r2
             best_model = model
             best_model_name = name
 
-    # Simpan model terbaik
+    print(f"Model terbaik: {best_model_name} dengan R2: {best_score:.4f}")
+
+    # Simpan model dan preprocessing tools
     with open(MODEL_PATH, "wb") as file:
         pickle.dump(best_model, file)
 
@@ -120,43 +110,48 @@ def train_and_save_model():
     with open(SCALER_PATH, "wb") as file:
         pickle.dump(scaler, file)
 
-    # Simpan informasi model terbaik
-    best_model_info = {"model_name": best_model_name, "r2_score": best_score}
+    with open(ENCODER_PATH, "wb") as file:
+        pickle.dump({"encoder": label_encoder, "classes": label_encoder.classes_}, file)
+
     with open(BEST_MODEL_INFO_PATH, "wb") as file:
-        pickle.dump(best_model_info, file)
+        pickle.dump({"name": best_model_name, "r2": best_score}, file)
 
-    print(f"Model terbaik: {best_model_name} dengan R²: {best_score:.4f}")
+    print("Model dan preprocessing tools berhasil disimpan!")
 
-# **Cek apakah model sudah ada, jika belum, latih dan simpan model**
-if not os.path.exists(MODEL_PATH):
-    st.write("Melatih model, harap tunggu...")
+# Cek apakah model sudah ada, jika tidak latih ulang
+if not os.path.exists(BEST_MODEL_INFO_PATH) or not os.path.exists(MODEL_PATH):
+    st.write("Model belum ditemukan. Melatih model baru, harap tunggu...")
     train_and_save_model()
 
-# **Load model dan preprocessing tools**
-with open(MODEL_PATH, "rb") as file:
-    best_model = pickle.load(file)
+# Load model dan preprocessing tools dengan pengecekan error
+try:
+    with open(MODEL_PATH, "rb") as file:
+        best_model = pickle.load(file)
 
-with open(IMPUTER_PATH, "rb") as file:
-    imputer = pickle.load(file)
+    with open(IMPUTER_PATH, "rb") as file:
+        imputer = pickle.load(file)
 
-with open(SCALER_PATH, "rb") as file:
-    scaler = pickle.load(file)
+    with open(SCALER_PATH, "rb") as file:
+        scaler = pickle.load(file)
 
-with open(ENCODER_PATH, "rb") as file:
-    encoder_data = pickle.load(file)
-    label_encoder = encoder_data["encoder"]
-    label_encoder.classes_ = encoder_data["classes"]
+    with open(ENCODER_PATH, "rb") as file:
+        encoder_data = pickle.load(file)
+        label_encoder = encoder_data["encoder"]
+        label_encoder.classes_ = encoder_data["classes"]
 
-with open(BEST_MODEL_INFO_PATH, "rb") as file:
-    best_model_info = pickle.load(file)
+    with open(BEST_MODEL_INFO_PATH, "rb") as file:
+        best_model_info = pickle.load(file)
 
-# **Streamlit UI**
+except FileNotFoundError as e:
+    st.error("Terjadi kesalahan: Model belum ditemukan. Silakan refresh halaman atau pastikan model telah dilatih dengan benar.")
+    st.stop()  # Hentikan eksekusi jika file tidak ditemukan
+
+# Streamlit UI
 st.title("Prediksi GCV (ARB) LAB")
+st.write(f"**Model yang digunakan:** {best_model_info['name']} dengan **R² = {best_model_info['r2']:.4f}**")
 st.write("Masukkan nilai parameter untuk mendapatkan prediksi.")
-st.write(f"**Model yang digunakan:** {best_model_info['model_name']}")
-st.write(f"**R² Model:** {best_model_info['r2_score']:.4f}")
 
-# **Input fields**
+# Input fields
 supplier_options = list(label_encoder.classes_)
 supplier_selected = st.selectbox("Suppliers", supplier_options)
 supplier_encoded = label_encoder.transform([supplier_selected])[0]
@@ -166,7 +161,7 @@ tm_arb_unloading = st.number_input("TM ARB UNLOADING", value=35.5)
 ash_content = st.number_input("Ash Content ARB UNLOADING", value=5.0)
 total_sulphur = st.number_input("Total Sulphur ARB UNLOADING", value=0.3)
 
-# **Predict button**
+# Predict button
 if st.button("Prediksi"):
     input_data = np.array([[gcv_arb_unloading, tm_arb_unloading, ash_content, total_sulphur]])
 
