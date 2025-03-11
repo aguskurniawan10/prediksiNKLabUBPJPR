@@ -27,7 +27,10 @@ ENCODER_PATH = "label_encoder.pkl"
 def train_and_save_model():
     """Melatih model dan menyimpannya menggunakan pickle."""
     # Load Data
-    file_path = "C:\Users\agus.kurniawan\Downloads\DATA PREDIKSI NK LAB 2025.xlsx"  # Sesuaikan dengan lokasi file Anda
+    from pathlib import Path
+
+    file_path = Path("C:/Users/agus.kurniawan/Downloads/DATA PREDIKSI NK LAB 2025.xlsx")
+
     df = pd.read_excel(file_path)
 
     # Standardize column names
