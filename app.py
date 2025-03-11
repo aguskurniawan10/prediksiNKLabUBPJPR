@@ -23,6 +23,7 @@ MODEL_PATH = "best_model.pkl"
 IMPUTER_PATH = "imputer.pkl"
 SCALER_PATH = "scaler.pkl"
 ENCODER_PATH = "label_encoder.pkl"
+BEST_MODEL_INFO_PATH = "best_model_info.pkl"
 
 # URL data dari GitHub (HARUS diubah ke raw link yang benar)
 GITHUB_URL = "https://raw.githubusercontent.com/aguskurniawan10/prediksiNKLabUBPJPR/main/DATA%20PREDIKSI%20NK%20LAB%202025.xlsx"
@@ -98,6 +99,7 @@ def train_and_save_model():
     # Latih dan evaluasi model
     best_model = None
     best_score = float('-inf')
+    best_model_name = ""
 
     for name, model in models.items():
         model.fit(X_train_final, y_train)
@@ -106,6 +108,7 @@ def train_and_save_model():
         if r2 > best_score:
             best_score = r2
             best_model = model
+            best_model_name = name
 
     # Simpan model terbaik
     with open(MODEL_PATH, "wb") as file:
@@ -117,7 +120,12 @@ def train_and_save_model():
     with open(SCALER_PATH, "wb") as file:
         pickle.dump(scaler, file)
 
-    print(f"Model terbaik berhasil disimpan dengan R²: {best_score:.4f}")
+    # Simpan informasi model terbaik
+    best_model_info = {"model_name": best_model_name, "r2_score": best_score}
+    with open(BEST_MODEL_INFO_PATH, "wb") as file:
+        pickle.dump(best_model_info, file)
+
+    print(f"Model terbaik: {best_model_name} dengan R²: {best_score:.4f}")
 
 # **Cek apakah model sudah ada, jika belum, latih dan simpan model**
 if not os.path.exists(MODEL_PATH):
@@ -139,9 +147,14 @@ with open(ENCODER_PATH, "rb") as file:
     label_encoder = encoder_data["encoder"]
     label_encoder.classes_ = encoder_data["classes"]
 
+with open(BEST_MODEL_INFO_PATH, "rb") as file:
+    best_model_info = pickle.load(file)
+
 # **Streamlit UI**
 st.title("Prediksi GCV (ARB) LAB")
 st.write("Masukkan nilai parameter untuk mendapatkan prediksi.")
+st.write(f"**Model yang digunakan:** {best_model_info['model_name']}")
+st.write(f"**R² Model:** {best_model_info['r2_score']:.4f}")
 
 # **Input fields**
 supplier_options = list(label_encoder.classes_)
