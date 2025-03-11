@@ -6,6 +6,8 @@ import pandas as pd
 import numpy as np
 import os
 import pickle
+import requests
+from io import BytesIO
 from pathlib import Path
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -16,23 +18,31 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.svm import SVR
 from sklearn.metrics import r2_score
 
-# Path untuk model dan preprocessing tools
+# Path untuk menyimpan model
 MODEL_PATH = "best_model.pkl"
 IMPUTER_PATH = "imputer.pkl"
 SCALER_PATH = "scaler.pkl"
 ENCODER_PATH = "label_encoder.pkl"
-DATA_PATH = Path(r"C:\Users\agus.kurniawan\Downloads\DATA PREDIKSI NK LAB 2025.xlsx")  # Sesuaikan path ini
+
+# URL data dari GitHub (HARUS diubah ke raw link yang benar)
+GITHUB_URL = "https://raw.githubusercontent.com/aguskurniawan10/prediksiNKLabUBPJPR/main/DATA%20PREDIKSI%20NK%20LAB%202025.xlsx"
+
+def load_data():
+    """Mengunduh dan membaca dataset dari GitHub"""
+    response = requests.get(GITHUB_URL)
+    response.raise_for_status()  # Pastikan tidak ada error
+    return pd.read_excel(BytesIO(response.content), engine="openpyxl")
 
 def train_and_save_model():
     """Melatih model dan menyimpannya menggunakan pickle."""
-    
-    # Load Data
-    df = pd.read_excel(DATA_PATH)
+
+    # Load Data dari GitHub
+    df = load_data()
 
     # Standarisasi nama kolom (hapus spasi)
     df.columns = df.columns.str.strip()
 
-    # Pastikan kolom yang diperlukan ada dalam dataset
+    # Pastikan kolom yang diperlukan ada
     required_columns = ['Suppliers', 'GCV ARB UNLOADING', 'TM ARB UNLOADING', 
                         'Ash Content ARB UNLOADING', 'Total Sulphur ARB UNLOADING', 'GCV (ARB) LAB']
     
@@ -43,6 +53,10 @@ def train_and_save_model():
     # Encode Suppliers
     label_encoder = LabelEncoder()
     df['Suppliers'] = label_encoder.fit_transform(df['Suppliers'])
+
+    # Simpan label encoder dengan classes_
+    with open(ENCODER_PATH, "wb") as file:
+        pickle.dump({"encoder": label_encoder, "classes": label_encoder.classes_}, file)
 
     # Fitur dan target
     X = df[['Suppliers', 'GCV ARB UNLOADING', 'TM ARB UNLOADING', 
@@ -84,21 +98,16 @@ def train_and_save_model():
     # Latih dan evaluasi model
     best_model = None
     best_score = float('-inf')
-    results = {}
 
     for name, model in models.items():
         model.fit(X_train_final, y_train)
         y_pred = model.predict(X_test_final)
         r2 = r2_score(y_test, y_pred)
-        results[name] = r2
         if r2 > best_score:
             best_score = r2
             best_model = model
 
-    best_model_name = max(results, key=results.get)
-    print(f"Model terbaik: {best_model_name} dengan R2: {best_score:.4f}")
-
-    # Simpan model dan preprocessing tools
+    # Simpan model terbaik
     with open(MODEL_PATH, "wb") as file:
         pickle.dump(best_model, file)
 
@@ -108,11 +117,7 @@ def train_and_save_model():
     with open(SCALER_PATH, "wb") as file:
         pickle.dump(scaler, file)
 
-    with open(ENCODER_PATH, "wb") as file:
-        pickle.dump((label_encoder, label_encoder.classes_), file)
-
-    print("Model dan preprocessing tools berhasil disimpan!")
-
+    print(f"Model terbaik berhasil disimpan dengan R²: {best_score:.4f}")
 
 # **Cek apakah model sudah ada, jika belum, latih dan simpan model**
 if not os.path.exists(MODEL_PATH):
@@ -130,8 +135,9 @@ with open(SCALER_PATH, "rb") as file:
     scaler = pickle.load(file)
 
 with open(ENCODER_PATH, "rb") as file:
-    label_encoder, classes = pickle.load(file)
-    label_encoder.classes_ = classes  # Pastikan encoding tetap sama
+    encoder_data = pickle.load(file)
+    label_encoder = encoder_data["encoder"]
+    label_encoder.classes_ = encoder_data["classes"]
 
 # **Streamlit UI**
 st.title("Prediksi GCV (ARB) LAB")
