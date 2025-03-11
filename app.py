@@ -120,7 +120,7 @@ def train_and_save_model():
 
 # Cek apakah model sudah ada, jika tidak latih ulang
 if not os.path.exists(BEST_MODEL_INFO_PATH) or not os.path.exists(MODEL_PATH):
-    st.write("Model belum ditemukan. Melatih model baru, harap tunggu...")
+    st.write("Prediksi Nilai Kalor Lab UBP JPR")
     train_and_save_model()
 
 # Load model dan preprocessing tools dengan pengecekan error
